@@ -11,48 +11,16 @@
 </head>
 <body className="bg-gray-100 font-sans">
   <div id="root"></div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    // Fallback for Chart.js if the primary CDN fails
+    if (!window.Chart) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/4.4.1/chart.umd.min.js"></script>');
+    }
+  </script>
   <script type="text/babel">
-    // ==== Types ====
-    type UserRole = "user" | "admin" | "organization";
-
-    interface User {
-      username: string;
-      role: UserRole;
-    }
-
-    type CaseType = "case_note" | "school_report" | "medical_document";
-    type AbuseLevel = "low" | "medium" | "serious";
-    type Gender = "male" | "female" | "other";
-
-    interface CaseData {
-      id: number;
-      type: CaseType;
-      childName: string;
-      childAge: number;
-      childGender: Gender;
-      content: string;
-      extracted: string;
-      date: string;
-      prediction: AbuseLevel;
-      notified: boolean;
-      matchedKeywords: string[];
-      createdBy: UserRole;
-      lastEditedBy?: UserRole;
-    }
-
-    interface DetectionResult {
-      level: AbuseLevel;
-      matchedKeywords: string[];
-      reasoning: string;
-    }
-
-    interface LevelIndicators {
-      keywords: string[];
-      bruisePercentage?: { min: number; max: number };
-    }
-
-    // ==== Configuration ====
-    const ABUSE_INDICATORS: Record<AbuseLevel, LevelIndicators> = {
+    // Configuration
+    const ABUSE_INDICATORS = {
       low: {
         keywords: ["trầy xước", "trầy da", "xước nhẹ", "xước"],
         bruisePercentage: { min: 0, max: 20 },
@@ -62,19 +30,12 @@
         bruisePercentage: { min: 20, max: 50 },
       },
       serious: {
-        keywords: [
-          "chảy máu",
-          "xuất huyết",
-          "gãy xương",
-          "vết bầm lớn",
-          "bạo hành",
-          "đánh đập",
-        ],
+        keywords: ["chảy máu", "xuất huyết", "gãy xương", "vết bầm lớn", "bạo hành", "đánh đập"],
         bruisePercentage: { min: 50, max: 100 },
       },
     };
 
-    const USERS: User[] = [
+    const USERS = [
       { username: "admin", role: "admin" },
       { username: "user", role: "user" },
       { username: "organization", role: "organization" },
@@ -82,17 +43,14 @@
 
     const DEMO_PASSWORD = "123";
 
-    // ==== Detection Logic ====
-    function extractPercentage(content: string): number | null {
+    // Detection Logic
+    function extractPercentage(content) {
       const percentMatch = content.match(/(\d+)\s*%/);
       return percentMatch ? parseInt(percentMatch[1], 10) : null;
     }
 
-    function checkLevel(
-      normalized: string,
-      indicators: LevelIndicators
-    ): { found: boolean; keywords: string[]; reasoning: string } {
-      const matchedKeywords: string[] = [];
+    function checkLevel(normalized, indicators) {
+      const matchedKeywords = [];
 
       for (const keyword of indicators.keywords) {
         if (normalized.includes(keyword)) {
@@ -101,11 +59,7 @@
       }
 
       const percentage = extractPercentage(normalized);
-      if (
-        percentage !== null &&
-        indicators.bruisePercentage &&
-        normalized.includes("bầm")
-      ) {
+      if (percentage !== null && indicators.bruisePercentage && normalized.includes("bầm")) {
         const { min, max } = indicators.bruisePercentage;
         if (percentage > min && percentage <= max) {
           matchedKeywords.push(`bầm tím ${percentage}%`);
@@ -127,7 +81,7 @@
       };
     }
 
-    function detectAbuseLevel(content: string): DetectionResult {
+    function detectAbuseLevel(content) {
       const normalized = content.trim().toLowerCase();
 
       const seriousMatch = checkLevel(normalized, ABUSE_INDICATORS.serious);
@@ -164,26 +118,44 @@
       };
     }
 
+    // Error Boundary Component
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="text-red-600 p-4 text-center">
+              Đã xảy ra lỗi: {this.state.error?.message || "Không xác định"}. Vui lòng thử lại.
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
     function App() {
       const [user, setUser] = React.useState(null);
       const [loginErr, setLoginErr] = React.useState("");
       const [username, setUsername] = React.useState("");
       const [password, setPassword] = React.useState("");
-
       const [cases, setCases] = React.useState([]);
       const [caseType, setCaseType] = React.useState("case_note");
       const [childName, setChildName] = React.useState("");
       const [childAge, setChildAge] = React.useState("");
       const [childGender, setChildGender] = React.useState("male");
+      const [region, setRegion] = React.useState("Miền Bắc");
+      const [origin, setOrigin] = React.useState("Nông thôn");
       const [content, setContent] = React.useState("");
       const [editingCaseId, setEditingCaseId] = React.useState(null);
 
       const handleLogin = (e) => {
         e.preventDefault();
-        const found = USERS.find(
-          (u) => u.username === username && password === DEMO_PASSWORD
-        );
-
+        const found = USERS.find((u) => u.username === username && password === DEMO_PASSWORD);
         if (found) {
           setUser(found);
           setLoginErr("");
@@ -194,9 +166,8 @@
 
       const handleAddCase = (e) => {
         e.preventDefault();
-
-        if (!childName.trim() || !childAge.trim() || !content.trim()) {
-          alert("Tên trẻ, tuổi và nội dung không được để trống");
+        if (!childName.trim() || !childAge.trim() || !content.trim() || !region || !origin) {
+          alert("Tên trẻ, tuổi, khu vực, xuất xứ và nội dung không được để trống");
           return;
         }
 
@@ -219,13 +190,15 @@
           childName: childName.trim(),
           childAge: ageNum,
           childGender,
+          region,
+          origin,
           content,
           extracted: detection.reasoning,
           date: new Date().toISOString().slice(0, 10),
           prediction: detection.level,
           notified: detection.level === "serious",
           matchedKeywords: detection.matchedKeywords,
-          createdBy: editingCaseId ? cases.find((c) => c.id === editingCaseId).createdBy : user.role,
+          createdBy: editingCaseId ? cases.find((c) => c.id === editingCaseId)?.createdBy || user.role : user.role,
           lastEditedBy: editingCaseId ? user.role : undefined,
         };
 
@@ -247,29 +220,17 @@
             message += `Nội dung: ${c.content}\n`;
             message += `Trích xuất: ${c.extracted}\n`;
             message += `Dự đoán: ${
-              c.prediction === "serious"
-                ? "Nghiêm trọng"
-                : c.prediction === "medium"
-                ? "Vừa"
-                : "Thấp"
+              c.prediction === "serious" ? "Nghiêm trọng" : c.prediction === "medium" ? "Vừa" : "Thấp"
             }\n`;
-            message += `Từ khóa khớp: ${
-              c.matchedKeywords.length > 0 ? c.matchedKeywords.join(", ") : "-"
-            }\n`;
+            message += `Từ khóa khớp: ${c.matchedKeywords.length > 0 ? c.matchedKeywords.join(", ") : "-"}\n`;
           });
           alert(message);
         } else {
-          alert(
-            editingCaseId
-              ? `Đã cập nhật thông tin cho trẻ "${childName.trim()}".`
-              : `Đã thêm thông tin mới cho trẻ "${childName.trim()}".`
-          );
+          alert(editingCaseId ? `Đã cập nhật thông tin cho trẻ "${childName.trim()}".` : `Đã thêm thông tin mới cho trẻ "${childName.trim()}".`);
         }
 
         if (editingCaseId) {
-          setCases((prev) =>
-            prev.map((c) => (c.id === editingCaseId ? newCase : c))
-          );
+          setCases((prev) => prev.map((c) => (c.id === editingCaseId ? newCase : c)));
         } else {
           setCases((prev) => [newCase, ...prev]);
         }
@@ -277,6 +238,8 @@
         setChildName("");
         setChildAge("");
         setChildGender("male");
+        setRegion("Miền Bắc");
+        setOrigin("Nông thôn");
         setContent("");
         setCaseType("case_note");
         setEditingCaseId(null);
@@ -292,6 +255,8 @@
         setChildName(caseData.childName);
         setChildAge(caseData.childAge.toString());
         setChildGender(caseData.childGender);
+        setRegion(caseData.region || "Miền Bắc");
+        setOrigin(caseData.origin || "Nông thôn");
         setContent(caseData.content);
       };
 
@@ -312,336 +277,524 @@
             ? cases.filter((c) => c.prediction === "serious")
             : user?.role === "user"
             ? cases.filter((c) => c.createdBy === "user" && !c.lastEditedBy)
-            : cases.filter(
-                (c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization"
-              );
+            : cases.filter((c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization");
 
         const total = filteredCases.length;
         const serious = filteredCases.filter((c) => c.prediction === "serious").length;
         const medium = filteredCases.filter((c) => c.prediction === "medium").length;
         const low = filteredCases.filter((c) => c.prediction === "low").length;
-        const hasSerious = filteredCases.some(
-          (c) => c.prediction === "serious" && c.notified
-        );
+        const hasSerious = filteredCases.some((c) => c.prediction === "serious" && c.notified);
 
-        return { total, serious, medium, low, hasSerious };
+        const genderCounts = { male: 0, female: 0, other: 0 };
+        const regionCounts = { "Miền Bắc": 0, "Miền Trung": 0, "Miền Nam": 0 };
+        const originCounts = { "Nông thôn": 0, "Thành thị": 0 };
+        const dateCounts = {};
+
+        if (user?.role === "organization") {
+          filteredCases.forEach((c) => {
+            genderCounts[c.childGender] = (genderCounts[c.childGender] || 0) + 1;
+            regionCounts[c.region] = (regionCounts[c.region] || 0) + 1;
+            originCounts[c.origin] = (originCounts[c.origin] || 0) + 1;
+            dateCounts[c.date] = (dateCounts[c.date] || 0) + 1;
+          });
+        }
+
+        return { total, serious, medium, low, hasSerious, genderCounts, regionCounts, originCounts, dateCounts };
       }, [cases, user]);
+
+      // Chart refs
+      const genderChartRef = React.useRef(null);
+      const regionChartRef = React.useRef(null);
+      const originChartRef = React.useRef(null);
+      const trendChartRef = React.useRef(null);
+
+      React.useEffect(() => {
+        let genderChart, regionChart, originChart, trendChart;
+
+        if (user?.role === "organization" && window.Chart) {
+          const hasData = stats.serious > 0;
+
+          // Gender Pie Chart
+          if (genderChartRef.current) {
+            genderChart = new window.Chart(genderChartRef.current, {
+              type: "pie",
+              data: {
+                labels: ["Nam", "Nữ", "Khác"],
+                datasets: [{
+                  data: hasData ? [
+                    stats.genderCounts.male,
+                    stats.genderCounts.female,
+                    stats.genderCounts.other
+                  ] : [1],
+                  backgroundColor: hasData ? ["#2563eb", "#db2777", "#6b7280"] : ["#e5e7eb"],
+                }],
+              },
+              options: {
+                responsive: true,
+                plugins: {
+                  legend: { position: "top" },
+                  title: { display: true, text: "Phân bố theo giới tính" },
+                  tooltip: { enabled: hasData },
+                  datalabels: { display: hasData }
+                }
+              }
+            });
+          }
+
+          // Region Pie Chart
+          if (regionChartRef.current) {
+            regionChart = new window.Chart(regionChartRef.current, {
+              type: "pie",
+              data: {
+                labels: ["Miền Bắc", "Miền Trung", "Miền Nam"],
+                datasets: [{
+                  data: hasData ? [
+                    stats.regionCounts["Miền Bắc"],
+                    stats.regionCounts["Miền Trung"],
+                    stats.regionCounts["Miền Nam"]
+                  ] : [1],
+                  backgroundColor: hasData ? ["#16a34a", "#ca8a04", "#dc2626"] : ["#e5e7eb"],
+                }],
+              },
+              options: {
+                responsive: true,
+                plugins: {
+                  legend: { position: "top" },
+                  title: { display: true, text: "Phân bố theo khu vực" },
+                  tooltip: { enabled: hasData },
+                  datalabels: { display: hasData }
+                }
+              }
+            });
+          }
+
+          // Origin Pie Chart
+          if (originChartRef.current) {
+            originChart = new window.Chart(originChartRef.current, {
+              type: "pie",
+              data: {
+                labels: ["Nông thôn", "Thành thị"],
+                datasets: [{
+                  data: hasData ? [
+                    stats.originCounts["Nông thôn"],
+                    stats.originCounts["Thành thị"]
+                  ] : [1],
+                  backgroundColor: hasData ? ["#059669", "#7c3aed"] : ["#e5e7eb"],
+                }],
+              },
+              options: {
+                responsive: true,
+                plugins: {
+                  legend: { position: "top" },
+                  title: { display: true, text: "Phân bố theo xuất xứ" },
+                  tooltip: { enabled: hasData },
+                  datalabels: { display: hasData }
+                }
+              }
+            });
+          }
+
+          // Trend Line Chart
+          if (trendChartRef.current) {
+            const sortedDates = Object.keys(stats.dateCounts).sort();
+            trendChart = new window.Chart(trendChartRef.current, {
+              type: "line",
+              data: {
+                labels: sortedDates.length > 0 ? sortedDates : ["Không có dữ liệu"],
+                datasets: [{
+                  label: "Số ca nghiêm trọng",
+                  data: sortedDates.length > 0 ? sortedDates.map(date => stats.dateCounts[date]) : [0],
+                  borderColor: "#dc2626",
+                  backgroundColor: "#dc2626",
+                  fill: false,
+                  tension: 0.1
+                }],
+              },
+              options: {
+                responsive: true,
+                plugins: {
+                  legend: { position: "top" },
+                  title: { display: true, text: "Xu hướng ca nghiêm trọng theo thời gian" }
+                },
+                scales: {
+                  x: { title: { display: true, text: "Ngày" } },
+                  y: { title: { display: true, text: "Số ca" }, beginAtZero: true }
+                }
+              }
+            });
+          }
+        }
+
+        // Cleanup on unmount or update
+        return () => {
+          if (genderChart) genderChart.destroy();
+          if (regionChart) regionChart.destroy();
+          if (originChart) originChart.destroy();
+          if (trendChart) trendChart.destroy();
+        };
+      }, [stats, user]);
 
       const displayedCases =
         user?.role === "organization"
           ? cases.filter((c) => c.prediction === "serious")
           : user?.role === "user"
           ? cases.filter((c) => c.createdBy === "user" && !c.lastEditedBy)
-          : cases.filter(
-              (c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization"
-            );
-
-      if (!user) {
-        return (
-          <div className="min-h-screen flex items-center justify-center bg-gray-100">
-            <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
-              <h2 className="text-2xl font-bold text-blue-600 mb-6 text-center">Đăng nhập</h2>
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                  Tài khoản:
-                </label>
-                <input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Nhập tài khoản"
-                  className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                />
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  Mật khẩu:
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Nhập mật khẩu"
-                  className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                />
-                <button
-                  onClick={handleLogin}
-                  className="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition"
-                >
-                  Đăng nhập
-                </button>
-              </div>
-              {loginErr && (
-                <div className="text-red-500 font-bold mt-4 text-center">
-                  {loginErr}
-                </div>
-              )}
-              <div className="mt-6 p-4 bg-gray-50 rounded-md">
-                <div className="mb-2">
-                  Tài khoản: <b>admin</b>, <b>user</b>, hoặc <b>organization</b>
-                </div>
-                <div>
-                  Mật khẩu: <b>123</b>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      }
+          : cases.filter((c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization");
 
       return (
-        <div className="min-h-screen bg-gray-100">
-          <header className="bg-blue-600 text-white p-4 shadow-md">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <div className="flex items-center">
-                <svg className="w-8 h-8 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path>
-                </svg>
-                <h1 className="text-xl font-bold">Hệ thống phát hiện & cảnh báo bạo hành trẻ em</h1>
-              </div>
-              <div>
-                Xin chào, <b>{user.username}</b> ({user.role})
-                <button
-                  onClick={() => setUser(null)}
-                  className="ml-4 bg-blue-700 text-white px-4 py-2 rounded-md hover:bg-blue-800 transition"
-                >
-                  Đăng xuất
-                </button>
-              </div>
-            </div>
-          </header>
-
-          <main className="max-w-7xl mx-auto p-6">
-            <div className="flex flex-col md:flex-row gap-8">
-              <div className="flex-1 bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold text-blue-600 mb-4">
-                  {editingCaseId ? "Chỉnh sửa dữ liệu" : "Nhập dữ liệu mới"}
-                </h3>
-                <div>
-                  <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
-                    Loại tài liệu:
-                  </label>
-                  <select
-                    id="type"
-                    value={caseType}
-                    onChange={(e) => setCaseType(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                  >
-                    <option value="case_note">Case Note</option>
-                    <option value="school_report">School Report</option>
-                    <option value="medical_document">Medical Document</option>
-                  </select>
-
-                  <label htmlFor="childName" className="block text-sm font-medium text-gray-700 mb-2">
-                    Tên trẻ:
-                  </label>
-                  <input
-                    id="childName"
-                    value={childName}
-                    onChange={(e) => setChildName(e.target.value)}
-                    placeholder="Nhập tên trẻ"
-                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                  />
-
-                  <label htmlFor="childAge" className="block text-sm font-medium text-gray-700 mb-2">
-                    Tuổi trẻ:
-                  </label>
-                  <input
-                    id="childAge"
-                    type="number"
-                    value={childAge}
-                    onChange={(e) => setChildAge(e.target.value)}
-                    placeholder="Nhập tuổi trẻ"
-                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                  />
-
-                  <label htmlFor="childGender" className="block text-sm font-medium text-gray-700 mb-2">
-                    Giới tính trẻ:
-                  </label>
-                  <select
-                    id="childGender"
-                    value={childGender}
-                    onChange={(e) => setChildGender(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                  >
-                    <option value="male">Nam</option>
-                    <option value="female">Nữ</option>
-                    <option value="other">Khác</option>
-                  </select>
-
-                  <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
-                    Nội dung:
-                  </label>
-                  <textarea
-                    id="content"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Nhập nội dung..."
-                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 h-32"
-                  />
-
-                  <button
-                    onClick={handleAddCase}
-                    className="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition"
-                  >
-                    {editingCaseId ? "Cập nhật" : "Gửi và phân tích"}
-                  </button>
-                  {editingCaseId && (user.role === "admin" || user.role === "organization") && (
+        <ErrorBoundary>
+          {user ? (
+            <div className="min-h-screen bg-gray-100">
+              <header className="bg-blue-600 text-white p-4 shadow-md">
+                <div className="max-w-7xl mx-auto flex items-center justify-between">
+                  <div className="flex items-center">
+                    <svg className="w-8 h-8 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    <h1 className="text-xl font-bold">Hệ thống phát hiện & cảnh báo bạo hành trẻ em</h1>
+                  </div>
+                  <div>
+                    Xin chào, <b>{user.username}</b> ({user.role})
                     <button
-                      onClick={() => {
-                        setChildName("");
-                        setChildAge("");
-                        setChildGender("male");
-                        setContent("");
-                        setCaseType("case_note");
-                        setEditingCaseId(null);
-                      }}
-                      className="w-full bg-gray-300 text-gray-700 p-3 rounded-md hover:bg-gray-400 transition mt-2"
+                      onClick={() => setUser(null)}
+                      className="ml-4 bg-blue-700 text-white px-4 py-2 rounded-md hover:bg-blue-800 transition"
                     >
-                      Hủy chỉnh sửa
+                      Đăng xuất
                     </button>
+                  </div>
+                </div>
+              </header>
+
+              <main className="max-w-7xl mx-auto p-6">
+                <div className="flex flex-col md:flex-row gap-8">
+                  <div className="flex-1 bg-white p-6 rounded-lg shadow-md">
+                    <h3 className="text-lg font-semibold text-blue-600 mb-4">
+                      {editingCaseId ? "Chỉnh sửa dữ liệu" : "Nhập dữ liệu mới"}
+                    </h3>
+                    <div>
+                      <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-2">
+                        Loại tài liệu:
+                      </label>
+                      <select
+                        id="type"
+                        value={caseType}
+                        onChange={(e) => setCaseType(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                      >
+                        <option value="case_note">Case Note</option>
+                        <option value="school_report">School Report</option>
+                        <option value="medical_document">Medical Document</option>
+                      </select>
+
+                      <label htmlFor="childName" className="block text-sm font-medium text-gray-700 mb-2">
+                        Tên trẻ:
+                      </label>
+                      <input
+                        id="childName"
+                        value={childName}
+                        onChange={(e) => setChildName(e.target.value)}
+                        placeholder="Nhập tên trẻ"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                      />
+
+                      <label htmlFor="childAge" className="block text-sm font-medium text-gray-700 mb-2">
+                        Tuổi trẻ:
+                      </label>
+                      <input
+                        id="childAge"
+                        type="number"
+                        value={childAge}
+                        onChange={(e) => setChildAge(e.target.value)}
+                        placeholder="Nhập tuổi trẻ"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                      />
+
+                      <label htmlFor="childGender" className="block text-sm font-medium text-gray-700 mb-2">
+                        Giới tính trẻ:
+                      </label>
+                      <select
+                        id="childGender"
+                        value={childGender}
+                        onChange={(e) => setChildGender(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                      >
+                        <option value="male">Nam</option>
+                        <option value="female">Nữ</option>
+                        <option value="other">Khác</option>
+                      </select>
+
+                      <label htmlFor="region" className="block text-sm font-medium text-gray-700 mb-2">
+                        Khu vực:
+                      </label>
+                      <select
+                        id="region"
+                        value={region}
+                        onChange={(e) => setRegion(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                      >
+                        <option value="Miền Bắc">Miền Bắc</option>
+                        <option value="Miền Trung">Miền Trung</option>
+                        <option value="Miền Nam">Miền Nam</option>
+                      </select>
+
+                      <label htmlFor="origin" className="block text-sm font-medium text-gray-700 mb-2">
+                        Xuất xứ:
+                      </label>
+                      <select
+                        id="origin"
+                        value={origin}
+                        onChange={(e) => setOrigin(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                      >
+                        <option value="Nông thôn">Nông thôn</option>
+                        <option value="Thành thị">Thành thị</option>
+                      </select>
+
+                      <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
+                        Nội dung:
+                      </label>
+                      <textarea
+                        id="content"
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder="Nhập nội dung..."
+                        className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 h-32"
+                      />
+
+                      <button
+                        onClick={handleAddCase}
+                        className="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition"
+                      >
+                        {editingCaseId ? "Cập nhật" : "Gửi và phân tích"}
+                      </button>
+                      {editingCaseId && (user.role === "admin" || user.role === "organization") && (
+                        <button
+                          onClick={() => {
+                            setChildName("");
+                            setChildAge("");
+                            setChildGender("male");
+                            setRegion("Miền Bắc");
+                            setOrigin("Nông thôn");
+                            setContent("");
+                            setCaseType("case_note");
+                            setEditingCaseId(null);
+                          }}
+                          className="w-full bg-gray-300 text-gray-700 p-3 rounded-md hover:bg-gray-400 transition mt-2"
+                        >
+                          Hủy chỉnh sửa
+                        </button>
+                      )}
+                    </div>
+
+                    {stats.hasSerious && (
+                      <div className="mt-4 p-4 bg-red-50 border border-red-500 rounded-md text-red-600 font-semibold">
+                        ⚠️ Phát hiện trường hợp nghiêm trọng! Đã gửi cảnh báo tới tổ chức liên quan.
+                      </div>
+                    )}
+                  </div>
+
+                  {(user.role === "admin" || user.role === "organization") && (
+                    <div className="w-full md:w-80 bg-white p-6 rounded-lg shadow-md">
+                      <h3 className="text-lg font-semibold text-blue-600 mb-4">Thống kê</h3>
+                      <p className="text-gray-700">
+                        Tổng số trường hợp: <b>{stats.total}</b>
+                      </p>
+                      <p className="text-gray-700">
+                        Nghiêm trọng: <b className="text-red-600">{stats.serious}</b>
+                      </p>
+                      <p className="text-gray-700">
+                        Vừa: <b className="text-orange-600">{stats.medium}</b>
+                      </p>
+                      <p className="text-gray-700">
+                        Thấp: <b className="text-green-600">{stats.low}</b>
+                      </p>
+                      {user.role === "organization" && (
+                        <div className="mt-6">
+                          <h4 className="text-md font-semibold text-blue-600 mb-2">Biểu đồ</h4>
+                          {!window.Chart ? (
+                            <p className="text-red-600 text-center">
+                              Lỗi: Không thể tải thư viện biểu đồ. Vui lòng kiểm tra kết nối mạng, tắt trình chặn quảng cáo, hoặc thử lại sau.
+                            </p>
+                          ) : stats.serious === 0 ? (
+                            <p className="text-gray-500 text-center">Chưa có dữ liệu nghiêm trọng để hiển thị biểu đồ.</p>
+                          ) : (
+                            <>
+                              <div className="mb-6">
+                                <canvas ref={genderChartRef}></canvas>
+                              </div>
+                              <div className="mb-6">
+                                <canvas ref={regionChartRef}></canvas>
+                              </div>
+                              <div className="mb-6">
+                                <canvas ref={originChartRef}></canvas>
+                              </div>
+                              <div>
+                                <canvas ref={trendChartRef}></canvas>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 
-                {stats.hasSerious && (
-                  <div className="mt-4 p-4 bg-red-50 border border-red-500 rounded-md text-red-600 font-semibold">
-                    ⚠️ Phát hiện trường hợp nghiêm trọng! Đã gửi cảnh báo tới tổ chức liên quan.
-                  </div>
-                )}
-              </div>
-
-              {(user.role === "admin" || user.role === "organization") && (
-                <div className="w-full md:w-64 bg-white p-6 rounded-lg shadow-md">
-                  <h3 className="text-lg font-semibold text-blue-600 mb-4">Thống kê</h3>
-                  <p className="text-gray-700">
-                    Tổng số trường hợp: <b>{stats.total}</b>
-                  </p>
-                  <p className="text-gray-700">
-                    Nghiêm trọng: <b className="text-red-600">{stats.serious}</b>
-                  </p>
-                  <p className="text-gray-700">
-                    Vừa: <b className="text-orange-600">{stats.medium}</b>
-                  </p>
-                  <p className="text-gray-700">
-                    Thấp: <b className="text-green-600">{stats.low}</b>
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <h3 className="text-lg font-semibold text-blue-600 mt-8">Lịch sử dữ liệu</h3>
-            <div className="overflow-x-auto mt-4">
-              <table className="w-full bg-white rounded-lg shadow-md">
-                <thead className="bg-gray-200">
-                  <tr>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Loại</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Tên trẻ</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Tuổi</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Giới tính</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Nội dung</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Trích xuất (NLP)</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Từ khóa khớp</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Dự đoán AI</th>
-                    <th className="p-3 text-left text-sm font-semibold text-gray-700">Ngày</th>
-                    {(user.role === "admin" || user.role === "organization") && (
-                      <th className="p-3 text-left text-sm font-semibold text-gray-700">Hành động</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayedCases.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={user.role === "user" ? 9 : 10}
-                        className="p-3 text-center text-gray-500"
-                      >
-                        Chưa có dữ liệu
-                      </td>
-                    </tr>
-                  ) : (
-                    displayedCases.map((c) => (
-                      <tr key={c.id} className="border-b">
-                        <td className="p-3">{c.type}</td>
-                        <td className="p-3">{c.childName}</td>
-                        <td className="p-3">{c.childAge}</td>
-                        <td className="p-3">
-                          {c.childGender === "male"
-                            ? "Nam"
-                            : c.childGender === "female"
-                            ? "Nữ"
-                            : "Khác"}
-                        </td>
-                        <td className="p-3 max-w-xs">{c.content}</td>
-                        <td className="p-3">{c.extracted}</td>
-                        <td className="p-3">
-                          {c.matchedKeywords.length > 0
-                            ? c.matchedKeywords.join(", ")
-                            : "-"}
-                        </td>
-                        <td
-                          className={`p-3 ${
-                            c.prediction === "serious"
-                              ? "text-red-600 font-semibold"
-                              : c.prediction === "medium"
-                              ? "text-orange-600"
-                              : "text-green-600"
-                          }`}
-                        >
-                          {c.prediction === "serious"
-                            ? "Nghiêm trọng"
-                            : c.prediction === "medium"
-                            ? "Vừa"
-                            : "Thấp"}
-                        </td>
-                        <td className="p-3">{c.date}</td>
+                <h3 className="text-lg font-semibold text-blue-600 mt-8">Lịch sử dữ liệu</h3>
+                <div className="overflow-x-auto mt-4">
+                  <table className="w-full bg-white rounded-lg shadow-md">
+                    <thead className="bg-gray-200">
+                      <tr>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Loại</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Tên trẻ</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Tuổi</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Giới tính</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Khu vực</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Xuất xứ</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Nội dung</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Trích xuất (NLP)</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Từ khóa khớp</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Dự đoán AI</th>
+                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Ngày</th>
                         {(user.role === "admin" || user.role === "organization") && (
-                          <td className="p-3">
-                            <button
-                              onClick={() => handleEditCase(c)}
-                              className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition mr-2"
-                            >
-                              Sửa
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCase(c.id)}
-                              className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 transition"
-                            >
-                              Xóa
-                            </button>
-                          </td>
+                          <th className="p-3 text-left text-sm font-semibold text-gray-700">Hành động</th>
                         )}
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {displayedCases.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={user.role === "user" ? 11 : 12}
+                            className="p-3 text-center text-gray-500"
+                          >
+                            Chưa có dữ liệu
+                          </td>
+                        </tr>
+                      ) : (
+                        displayedCases.map((c) => (
+                          <tr key={c.id} className="border-b">
+                            <td className="p-3">{c.type}</td>
+                            <td className="p-3">{c.childName}</td>
+                            <td className="p-3">{c.childAge}</td>
+                            <td className="p-3">
+                              {c.childGender === "male" ? "Nam" : c.childGender === "female" ? "Nữ" : "Khác"}
+                            </td>
+                            <td className="p-3">{c.region}</td>
+                            <td className="p-3">{c.origin}</td>
+                            <td className="p-3 max-w-xs">{c.content}</td>
+                            <td className="p-3">{c.extracted}</td>
+                            <td className="p-3">
+                              {c.matchedKeywords.length > 0 ? c.matchedKeywords.join(", ") : "-"}
+                            </td>
+                            <td
+                              className={`p-3 ${
+                                c.prediction === "serious"
+                                  ? "text-red-600 font-semibold"
+                                  : c.prediction === "medium"
+                                  ? "text-orange-600"
+                                  : "text-green-600"
+                              }`}
+                            >
+                              {c.prediction === "serious"
+                                ? "Nghiêm trọng"
+                                : c.prediction === "medium"
+                                ? "Vừa"
+                                : "Thấp"}
+                            </td>
+                            <td className="p-3">{c.date}</td>
+                            {(user.role === "admin" || user.role === "organization") && (
+                              <td className="p-3">
+                                <button
+                                  onClick={() => handleEditCase(c)}
+                                  className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition mr-2"
+                                >
+                                  Sửa
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCase(c.id)}
+                                  className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 transition"
+                                >
+                                  Xóa
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-            <div className="mt-8 p-6 bg-blue-50 rounded-lg">
-              <b className="text-blue-600">Hướng dẫn sử dụng:</b>
-              <ul className="mt-2 list-disc list-inside text-gray-700">
-                <li>
-                  <b>Thấp:</b> trầy xước, xước nhẹ, bầm tím dưới 20%
-                </li>
-                <li>
-                  <b>Vừa:</b> bầm tím, sưng tấy, bầm tím 20-50%
-                </li>
-                <li>
-                  <b>Nghiêm trọng:</b> chảy máu, bạo hành, đánh đập, bầm tím trên 50%
-                </li>
-              </ul>
-              <div className="mt-2 italic text-gray-600">
-                Ví dụ: "Trẻ bị bầm tím 60%" sẽ được phân loại nghiêm trọng
+                <div className="mt-8 p-6 bg-blue-50 rounded-lg">
+                  <b className="text-blue-600">Hướng dẫn sử dụng:</b>
+                  <ul className="mt-2 list-disc list-inside text-gray-700">
+                    <li><b>Thấp:</b> trầy xước, xước nhẹ, bầm tím dưới 20%</li>
+                    <li><b>Vừa:</b> bầm tím, sưng tấy, bầm tím 20-50%</li>
+                    <li><b>Nghiêm trọng:</b> chảy máu, bạo hành, đánh đập, bầm tím trên 50%</li>
+                  </ul>
+                  <div className="mt-2 italic text-gray-600">
+                    Ví dụ: "Trẻ bị bầm tím 60%" sẽ được phân loại nghiêm trọng
+                  </div>
+                </div>
+              </main>
+
+              <footer className="bg-blue-600 text-white p-4 mt-8">
+                <div className="max-w-7xl mx-auto text-center">
+                  <p>© 2025 Hệ thống bảo vệ trẻ em. Tất cả quyền được bảo lưu.</p>
+                  <p className="mt-2">Ứng dụng này hỗ trợ phát hiện và báo cáo các trường hợp bạo hành trẻ em để bảo vệ tương lai của trẻ.</p>
+                </div>
+              </footer>
+            </div>
+          ) : (
+            <div className="min-h-screen flex items-center justify-center bg-gray-100">
+              <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+                <h2 className="text-2xl font-bold text-blue-600 mb-6 text-center">Đăng nhập</h2>
+                <div>
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                    Tài khoản:
+                  </label>
+                  <input
+                    id="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Nhập tài khoản"
+                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                  />
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                    Mật khẩu:
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu"
+                    className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                  />
+                  <button
+                    onClick={handleLogin}
+                    className="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition"
+                  >
+                    Đăng nhập
+                  </button>
+                </div>
+                {loginErr && (
+                  <div className="text-red-500 font-bold mt-4 text-center">
+                    {loginErr}
+                  </div>
+                )}
+                <div className="mt-6 p-4 bg-gray-50 rounded-md">
+                  <div className="mb-2">
+                    Tài khoản: <b>admin</b>, <b>user</b>, hoặc <b>organization</b>
+                  </div>
+                  <div>
+                    Mật khẩu: <b>123</b>
+                  </div>
+                </div>
               </div>
             </div>
-          </main>
-
-          <footer className="bg-blue-600 text-white p-4 mt-8">
-            <div className="max-w-7xl mx-auto text-center">
-              <p>© 2025 Hệ thống bảo vệ trẻ em. Tất cả quyền được bảo lưu.</p>
-              <p className="mt-2">Ứng dụng này hỗ trợ phát hiện và báo cáo các trường hợp bạo hành trẻ em để bảo vệ tương lai của trẻ.</p>
-            </div>
-          </footer>
-        </div>
+          )}
+        </ErrorBoundary>
       );
     }
 
