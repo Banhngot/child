@@ -164,6 +164,41 @@
         }
       };
 
+      // Auto-fill logic for organization role
+      React.useEffect(() => {
+        if (user?.role === "organization" && (caseType === "school_report" || caseType === "medical_document") && childName && childAge && childGender) {
+          const ageNum = parseInt(childAge, 10);
+          if (!isNaN(ageNum)) {
+            // Find matching case from user or admin, latest first
+            const matchingCases = cases.filter(
+              (c) =>
+                (c.createdBy === "user" || c.createdBy === "admin") &&
+                c.childName.toLowerCase() === childName.trim().toLowerCase() &&
+                c.childAge === ageNum &&
+                c.childGender === childGender
+            ).sort((a, b) => b.id - a.id); // Latest by id
+
+            if (matchingCases.length > 0) {
+              const latestMatch = matchingCases[0];
+              setRegion(latestMatch.region || "Miền Bắc");
+              setOrigin(latestMatch.origin || "Nông thôn");
+              setContent(latestMatch.content || "");
+              alert(`Đã trích xuất thông tin từ lịch sử: Khu vực - ${latestMatch.region}, Xuất xứ - ${latestMatch.origin}, Nội dung - ${latestMatch.content.substring(0, 50)}...`);
+            } else {
+              // Reset to defaults if no match
+              setRegion("Miền Bắc");
+              setOrigin("Nông thôn");
+              setContent("");
+            }
+          }
+        } else {
+          // Reset if not applicable
+          setRegion("Miền Bắc");
+          setOrigin("Nông thôn");
+          setContent("");
+        }
+      }, [caseType, childName, childAge, childGender, user, cases]);
+
       const handleAddCase = (e) => {
         e.preventDefault();
         if (!childName.trim() || !childAge.trim() || !content.trim() || !region || !origin) {
@@ -274,7 +309,7 @@
       const stats = React.useMemo(() => {
         const filteredCases =
           user?.role === "organization"
-            ? cases.filter((c) => c.prediction === "serious")
+            ? cases // Show all cases for organization
             : user?.role === "user"
             ? cases.filter((c) => c.createdBy === "user" && !c.lastEditedBy)
             : cases.filter((c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization");
@@ -312,7 +347,7 @@
         let genderChart, regionChart, originChart, trendChart;
 
         if (user?.role === "organization" && window.Chart) {
-          const hasData = stats.serious > 0;
+          const hasData = stats.total > 0;
 
           // Gender Pie Chart
           if (genderChartRef.current) {
@@ -402,7 +437,7 @@
               data: {
                 labels: sortedDates.length > 0 ? sortedDates : ["Không có dữ liệu"],
                 datasets: [{
-                  label: "Số ca nghiêm trọng",
+                  label: "Số ca",
                   data: sortedDates.length > 0 ? sortedDates.map(date => stats.dateCounts[date]) : [0],
                   borderColor: "#dc2626",
                   backgroundColor: "#dc2626",
@@ -414,7 +449,7 @@
                 responsive: true,
                 plugins: {
                   legend: { position: "top" },
-                  title: { display: true, text: "Xu hướng ca nghiêm trọng theo thời gian" }
+                  title: { display: true, text: "Xu hướng số ca theo thời gian" }
                 },
                 scales: {
                   x: { title: { display: true, text: "Ngày" } },
@@ -436,7 +471,7 @@
 
       const displayedCases =
         user?.role === "organization"
-          ? cases.filter((c) => c.prediction === "serious")
+          ? cases // Show all cases for organization
           : user?.role === "user"
           ? cases.filter((c) => c.createdBy === "user" && !c.lastEditedBy)
           : cases.filter((c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization");
@@ -449,7 +484,7 @@
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                   <div className="flex items-center">
                     <svg className="w-8 h-8 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 0118 0z"></path>
                     </svg>
                     <h1 className="text-xl font-bold">Hệ thống phát hiện & cảnh báo bạo hành trẻ em</h1>
                   </div>
@@ -615,8 +650,8 @@
                             <p className="text-red-600 text-center">
                               Lỗi: Không thể tải thư viện biểu đồ. Vui lòng kiểm tra kết nối mạng, tắt trình chặn quảng cáo, hoặc thử lại sau.
                             </p>
-                          ) : stats.serious === 0 ? (
-                            <p className="text-gray-500 text-center">Chưa có dữ liệu nghiêm trọng để hiển thị biểu đồ.</p>
+                          ) : stats.total === 0 ? (
+                            <p className="text-gray-500 text-center">Chưa có dữ liệu để hiển thị biểu đồ.</p>
                           ) : (
                             <>
                               <div className="mb-6">
@@ -639,91 +674,140 @@
                   )}
                 </div>
 
-                <h3 className="text-lg font-semibold text-blue-600 mt-8">Lịch sử dữ liệu</h3>
-                <div className="overflow-x-auto mt-4">
-                  <table className="w-full bg-white rounded-lg shadow-md">
-                    <thead className="bg-gray-200">
-                      <tr>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Loại</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Tên trẻ</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Tuổi</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Giới tính</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Khu vực</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Xuất xứ</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Nội dung</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Trích xuất (NLP)</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Từ khóa khớp</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Dự đoán AI</th>
-                        <th className="p-3 text-left text-sm font-semibold text-gray-700">Ngày</th>
-                        {(user.role === "admin" || user.role === "organization") && (
-                          <th className="p-3 text-left text-sm font-semibold text-gray-700">Hành động</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayedCases.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={user.role === "user" ? 11 : 12}
-                            className="p-3 text-center text-gray-500"
-                          >
-                            Chưa có dữ liệu
-                          </td>
-                        </tr>
-                      ) : (
-                        displayedCases.map((c) => (
-                          <tr key={c.id} className="border-b">
-                            <td className="p-3">{c.type}</td>
-                            <td className="p-3">{c.childName}</td>
-                            <td className="p-3">{c.childAge}</td>
-                            <td className="p-3">
-                              {c.childGender === "male" ? "Nam" : c.childGender === "female" ? "Nữ" : "Khác"}
-                            </td>
-                            <td className="p-3">{c.region}</td>
-                            <td className="p-3">{c.origin}</td>
-                            <td className="p-3 max-w-xs">{c.content}</td>
-                            <td className="p-3">{c.extracted}</td>
-                            <td className="p-3">
-                              {c.matchedKeywords.length > 0 ? c.matchedKeywords.join(", ") : "-"}
-                            </td>
-                            <td
-                              className={`p-3 ${
-                                c.prediction === "serious"
-                                  ? "text-red-600 font-semibold"
-                                  : c.prediction === "medium"
-                                  ? "text-orange-600"
-                                  : "text-green-600"
-                              }`}
-                            >
-                              {c.prediction === "serious"
-                                ? "Nghiêm trọng"
-                                : c.prediction === "medium"
-                                ? "Vừa"
-                                : "Thấp"}
-                            </td>
-                            <td className="p-3">{c.date}</td>
-                            {(user.role === "admin" || user.role === "organization") && (
-                              <td className="p-3">
-                                <button
-                                  onClick={() => handleEditCase(c)}
-                                  className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition mr-2"
-                                >
-                                  Sửa
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteCase(c.id)}
-                                  className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 transition"
-                                >
-                                  Xóa
-                                </button>
-                              </td>
+                {(user.role === "admin" || user.role === "organization") && (
+                  <>
+                    <h3 className="text-lg font-semibold text-blue-600 mt-8">Lịch sử dữ liệu</h3>
+                    <div className="overflow-x-auto mt-4">
+                      <table className="w-full bg-white rounded-lg shadow-md">
+                        <thead className="bg-gray-200">
+                          <tr>
+                            {user.role === "admin" || (user.role === "organization" && displayedCases.some(c => c.type === "school_report" && (c.createdBy === "user" || c.createdBy === "admin"))) ? (
+                              <>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Loại</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Tên trẻ</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Tuổi</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Giới tính</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Khu vực</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Xuất xứ</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Nội dung</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Trích xuất (NLP)</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Từ khóa khớp</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Dự đoán AI</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Ngày</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Hành động</th>
+                              </>
+                            ) : (
+                              <>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Tên trẻ</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Dự đoán AI</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Ngày</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">Hành động</th>
+                              </>
                             )}
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody>
+                          {displayedCases.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={user.role === "admin" || displayedCases.some(c => c.type === "school_report" && (c.createdBy === "user" || c.createdBy === "admin")) ? 12 : 4}
+                                className="p-3 text-center text-gray-500"
+                              >
+                                Chưa có dữ liệu
+                              </td>
+                            </tr>
+                          ) : (
+                            displayedCases.map((c) => (
+                              <tr key={c.id} className="border-b">
+                                {user.role === "admin" || (user.role === "organization" && c.type === "school_report" && (c.createdBy === "user" || c.createdBy === "admin")) ? (
+                                  <>
+                                    <td className="p-3">{c.type}</td>
+                                    <td className="p-3">{c.childName}</td>
+                                    <td className="p-3">{c.childAge}</td>
+                                    <td className="p-3">
+                                      {c.childGender === "male" ? "Nam" : c.childGender === "female" ? "Nữ" : "Khác"}
+                                    </td>
+                                    <td className="p-3">{c.region}</td>
+                                    <td className="p-3">{c.origin}</td>
+                                    <td className="p-3 max-w-xs">{c.content}</td>
+                                    <td className="p-3">{c.extracted}</td>
+                                    <td className="p-3">
+                                      {c.matchedKeywords.length > 0 ? c.matchedKeywords.join(", ") : "-"}
+                                    </td>
+                                    <td
+                                      className={`p-3 ${
+                                        c.prediction === "serious"
+                                          ? "text-red-600 font-semibold"
+                                          : c.prediction === "medium"
+                                          ? "text-orange-600"
+                                          : "text-green-600"
+                                      }`}
+                                    >
+                                      {c.prediction === "serious"
+                                        ? "Nghiêm trọng"
+                                        : c.prediction === "medium"
+                                        ? "Vừa"
+                                        : "Thấp"}
+                                    </td>
+                                    <td className="p-3">{c.date}</td>
+                                    <td className="p-3">
+                                      <button
+                                        onClick={() => handleEditCase(c)}
+                                        className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition mr-2"
+                                      >
+                                        Sửa
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteCase(c.id)}
+                                        className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 transition"
+                                      >
+                                        Xóa
+                                      </button>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="p-3">{c.childName}</td>
+                                    <td
+                                      className={`p-3 ${
+                                        c.prediction === "serious"
+                                          ? "text-red-600 font-semibold"
+                                          : c.prediction === "medium"
+                                          ? "text-orange-600"
+                                          : "text-green-600"
+                                      }`}
+                                    >
+                                      {c.prediction === "serious"
+                                        ? "Nghiêm trọng"
+                                        : c.prediction === "medium"
+                                        ? "Vừa"
+                                        : "Thấp"}
+                                    </td>
+                                    <td className="p-3">{c.date}</td>
+                                    <td className="p-3">
+                                      <button
+                                        onClick={() => handleEditCase(c)}
+                                        className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition mr-2"
+                                      >
+                                        Sửa
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteCase(c.id)}
+                                        className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 transition"
+                                      >
+                                        Xóa
+                                      </button>
+                                    </td>
+                                  </>
+                                )}
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
 
                 <div className="mt-8 p-6 bg-blue-50 rounded-lg">
                   <b className="text-blue-600">Hướng dẫn sử dụng:</b>
