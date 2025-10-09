@@ -169,14 +169,13 @@
         if (user?.role === "organization" && (caseType === "school_report" || caseType === "medical_document") && childName && childAge && childGender) {
           const ageNum = parseInt(childAge, 10);
           if (!isNaN(ageNum)) {
-            // Find matching case from user or admin, latest first
             const matchingCases = cases.filter(
               (c) =>
                 (c.createdBy === "user" || c.createdBy === "admin") &&
                 c.childName.toLowerCase() === childName.trim().toLowerCase() &&
                 c.childAge === ageNum &&
                 c.childGender === childGender
-            ).sort((a, b) => b.id - a.id); // Latest by id
+            ).sort((a, b) => b.id - a.id);
 
             if (matchingCases.length > 0) {
               const latestMatch = matchingCases[0];
@@ -185,14 +184,12 @@
               setContent(latestMatch.content || "");
               alert(`Đã trích xuất thông tin từ lịch sử: Khu vực - ${latestMatch.region}, Xuất xứ - ${latestMatch.origin}, Nội dung - ${latestMatch.content.substring(0, 50)}...`);
             } else {
-              // Reset to defaults if no match
               setRegion("Miền Bắc");
               setOrigin("Nông thôn");
               setContent("");
             }
           }
         } else {
-          // Reset if not applicable
           setRegion("Miền Bắc");
           setOrigin("Nông thôn");
           setContent("");
@@ -309,7 +306,7 @@
       const stats = React.useMemo(() => {
         const filteredCases =
           user?.role === "organization"
-            ? cases // Show all cases for organization
+            ? cases
             : user?.role === "user"
             ? cases.filter((c) => c.createdBy === "user" && !c.lastEditedBy)
             : cases.filter((c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization");
@@ -325,14 +322,12 @@
         const originCounts = { "Nông thôn": 0, "Thành thị": 0 };
         const dateCounts = {};
 
-        if (user?.role === "organization") {
-          filteredCases.forEach((c) => {
-            genderCounts[c.childGender] = (genderCounts[c.childGender] || 0) + 1;
-            regionCounts[c.region] = (regionCounts[c.region] || 0) + 1;
-            originCounts[c.origin] = (originCounts[c.origin] || 0) + 1;
-            dateCounts[c.date] = (dateCounts[c.date] || 0) + 1;
-          });
-        }
+        filteredCases.forEach((c) => {
+          genderCounts[c.childGender] = (genderCounts[c.childGender] || 0) + 1;
+          regionCounts[c.region] = (regionCounts[c.region] || 0) + 1;
+          originCounts[c.origin] = (originCounts[c.origin] || 0) + 1;
+          dateCounts[c.date] = (dateCounts[c.date] || 0) + 1;
+        });
 
         return { total, serious, medium, low, hasSerious, genderCounts, regionCounts, originCounts, dateCounts };
       }, [cases, user]);
@@ -346,7 +341,7 @@
       React.useEffect(() => {
         let genderChart, regionChart, originChart, trendChart;
 
-        if (user?.role === "organization" && window.Chart) {
+        if (window.Chart) {
           const hasData = stats.total > 0;
 
           // Gender Pie Chart
@@ -460,18 +455,17 @@
           }
         }
 
-        // Cleanup on unmount or update
         return () => {
           if (genderChart) genderChart.destroy();
           if (regionChart) regionChart.destroy();
           if (originChart) originChart.destroy();
           if (trendChart) trendChart.destroy();
         };
-      }, [stats, user]);
+      }, [stats]);
 
       const displayedCases =
         user?.role === "organization"
-          ? cases // Show all cases for organization
+          ? cases
           : user?.role === "user"
           ? cases.filter((c) => c.createdBy === "user" && !c.lastEditedBy)
           : cases.filter((c) => c.createdBy !== "organization" && c.lastEditedBy !== "organization");
@@ -501,7 +495,7 @@
               </header>
 
               <main className="max-w-7xl mx-auto p-6">
-                <div className="flex flex-col md:flex-row gap-8">
+                <div className="flex flex-col lg:flex-row gap-8">
                   <div className="flex-1 bg-white p-6 rounded-lg shadow-md">
                     <h3 className="text-lg font-semibold text-blue-600 mb-4">
                       {editingCaseId ? "Chỉnh sửa dữ liệu" : "Nhập dữ liệu mới"}
@@ -628,50 +622,42 @@
                     )}
                   </div>
 
-                  {(user.role === "admin" || user.role === "organization") && (
-                    <div className="w-full md:w-80 bg-white p-6 rounded-lg shadow-md">
-                      <h3 className="text-lg font-semibold text-blue-600 mb-4">Thống kê</h3>
-                      <p className="text-gray-700">
-                        Tổng số trường hợp: <b>{stats.total}</b>
-                      </p>
-                      <p className="text-gray-700">
-                        Nghiêm trọng: <b className="text-red-600">{stats.serious}</b>
-                      </p>
-                      <p className="text-gray-700">
-                        Vừa: <b className="text-orange-600">{stats.medium}</b>
-                      </p>
-                      <p className="text-gray-700">
-                        Thấp: <b className="text-green-600">{stats.low}</b>
-                      </p>
-                      {user.role === "organization" && (
-                        <div className="mt-6">
-                          <h4 className="text-md font-semibold text-blue-600 mb-2">Biểu đồ</h4>
-                          {!window.Chart ? (
-                            <p className="text-red-600 text-center">
-                              Lỗi: Không thể tải thư viện biểu đồ. Vui lòng kiểm tra kết nối mạng, tắt trình chặn quảng cáo, hoặc thử lại sau.
-                            </p>
-                          ) : stats.total === 0 ? (
-                            <p className="text-gray-500 text-center">Chưa có dữ liệu để hiển thị biểu đồ.</p>
-                          ) : (
-                            <>
-                              <div className="mb-6">
-                                <canvas ref={genderChartRef}></canvas>
-                              </div>
-                              <div className="mb-6">
-                                <canvas ref={regionChartRef}></canvas>
-                              </div>
-                              <div className="mb-6">
-                                <canvas ref={originChartRef}></canvas>
-                              </div>
-                              <div>
-                                <canvas ref={trendChartRef}></canvas>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
+                  <div className="flex-1 bg-white p-6 rounded-lg shadow-md">
+                    <h3 className="text-lg font-semibold text-blue-600 mb-4">Thống kê & Biểu đồ</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="p-4 bg-gray-50 rounded-md">
+                        <h4 className="text-md font-semibold text-gray-700">Tổng quan</h4>
+                        <p className="mt-2">Tổng số trường hợp: <b>{stats.total}</b></p>
+                        <p className="mt-1">Nghiêm trọng: <b className="text-red-600">{stats.serious}</b></p>
+                        <p className="mt-1">Vừa: <b className="text-orange-600">{stats.medium}</b></p>
+                        <p className="mt-1">Thấp: <b className="text-green-600">{stats.low}</b></p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-md">
+                        <h4 className="text-md font-semibold text-gray-700">Biểu đồ giới tính</h4>
+                        <canvas ref={genderChartRef} className="mt-2"></canvas>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-md">
+                        <h4 className="text-md font-semibold text-gray-700">Biểu đồ khu vực</h4>
+                        <canvas ref={regionChartRef} className="mt-2"></canvas>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-md">
+                        <h4 className="text-md font-semibold text-gray-700">Biểu đồ xuất xứ</h4>
+                        <canvas ref={originChartRef} className="mt-2"></canvas>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-md md:col-span-2">
+                        <h4 className="text-md font-semibold text-gray-700">Xu hướng theo thời gian</h4>
+                        <canvas ref={trendChartRef} className="mt-2"></canvas>
+                      </div>
                     </div>
-                  )}
+                    {!window.Chart && (
+                      <p className="text-red-600 text-center mt-4">
+                        Lỗi: Không thể tải thư viện biểu đồ. Vui lòng kiểm tra kết nối mạng, tắt trình chặn quảng cáo, hoặc thử lại sau.
+                      </p>
+                    )}
+                    {stats.total === 0 && window.Chart && (
+                      <p className="text-gray-500 text-center mt-4">Chưa có dữ liệu để hiển thị biểu đồ.</p>
+                    )}
+                  </div>
                 </div>
 
                 {(user.role === "admin" || user.role === "organization") && (
@@ -729,7 +715,7 @@
                                     </td>
                                     <td className="p-3">{c.region}</td>
                                     <td className="p-3">{c.origin}</td>
-                                    <td className="p-3 max-w-xs">{c.content}</td>
+                                    <td className="p-3 max-w-xs">{c.content.substring(0, 50)}{c.content.length > 50 ? "..." : ""}</td>
                                     <td className="p-3">{c.extracted}</td>
                                     <td className="p-3">
                                       {c.matchedKeywords.length > 0 ? c.matchedKeywords.join(", ") : "-"}
