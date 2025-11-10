@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Child Abuse Detection & Alert System</title>
+  <title>KARA Child Protection Database</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -118,6 +118,29 @@
       };
     }
 
+    // Helper: Calculate age from DOB
+    function calculateAge(dobString) {
+      if (!dobString) return null;
+      const dob = new Date(dobString);
+      const today = new Date();
+      let age = today.getFullYear() - dob.getFullYear();
+      const monthDiff = today.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--;
+      }
+      return age >= 0 ? age : null;
+    }
+
+    // Helper: Format date to Vietnamese format (dd/mm/yyyy)
+    function formatDateVN(dateString) {
+      if (!dateString) return "-";
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+
     // Error Boundary Component
     class ErrorBoundary extends React.Component {
       state = { hasError: false, error: null };
@@ -146,7 +169,7 @@
       const [cases, setCases] = React.useState([]);
       const [caseType, setCaseType] = React.useState("case_note");
       const [childName, setChildName] = React.useState("");
-      const [childAge, setChildAge] = React.useState("");
+      const [childDOB, setChildDOB] = React.useState(""); // Day Of Birth
       const [childGender, setChildGender] = React.useState("male");
       const [region, setRegion] = React.useState("Northern");
       const [origin, setOrigin] = React.useState("Rural");
@@ -166,14 +189,14 @@
 
       // Auto-fill logic for organization role
       React.useEffect(() => {
-        if (user?.role === "organization" && (caseType === "school_report" || caseType === "medical_document") && childName && childAge && childGender) {
-          const ageNum = parseInt(childAge, 10);
-          if (!isNaN(ageNum)) {
+        if (user?.role === "organization" && (caseType === "school_report" || caseType === "medical_document") && childName && childDOB && childGender) {
+          const age = calculateAge(childDOB);
+          if (age !== null) {
             const matchingCases = cases.filter(
               (c) =>
                 (c.createdBy === "user" || c.createdBy === "admin") &&
                 c.childName.toLowerCase() === childName.trim().toLowerCase() &&
-                c.childAge === ageNum &&
+                c.childAge === age &&
                 c.childGender === childGender
             ).sort((a, b) => b.id - a.id);
 
@@ -194,18 +217,18 @@
           setOrigin("Rural");
           setContent("");
         }
-      }, [caseType, childName, childAge, childGender, user, cases]);
+      }, [caseType, childName, childDOB, childGender, user, cases]);
 
       const handleAddCase = (e) => {
         e.preventDefault();
-        if (!childName.trim() || !childAge.trim() || !content.trim() || !region || !origin) {
-          alert("Child name, age, region, origin, and content cannot be empty");
+        if (!childName.trim() || !childDOB.trim() || !content.trim() || !region || !origin) {
+          alert("Child name, day of birth, region, origin, and content cannot be empty");
           return;
         }
 
-        const ageNum = parseInt(childAge, 10);
-        if (isNaN(ageNum) || ageNum <= 0) {
-          alert("Age must be a valid positive number");
+        const age = calculateAge(childDOB);
+        if (age === null || age < 0) {
+          alert("Please enter a valid day of birth");
           return;
         }
 
@@ -220,7 +243,8 @@
           id: editingCaseId || Date.now(),
           type: caseType,
           childName: childName.trim(),
-          childAge: ageNum,
+          childAge: age,
+          childDOB: childDOB, // Lưu DOB
           childGender,
           region,
           origin,
@@ -237,13 +261,13 @@
         const existingCases = cases.filter(
           (c) =>
             c.childName.toLowerCase() === childName.trim().toLowerCase() &&
-            c.childAge === ageNum &&
+            c.childAge === age &&
             c.childGender === childGender &&
             c.id !== editingCaseId
         );
 
         if (existingCases.length > 0) {
-          let message = `Duplicate information detected for child "${childName.trim()}" (Age: ${ageNum}, Gender: ${
+          let message = `Duplicate information detected for child "${childName.trim()}" (DOB: ${childDOB}, Age: ${age}, Gender: ${
             childGender === "male" ? "Male" : childGender === "female" ? "Female" : "Other"
           }). Previous cases:\n`;
           existingCases.forEach((c, index) => {
@@ -268,7 +292,7 @@
         }
 
         setChildName("");
-        setChildAge("");
+        setChildDOB("");
         setChildGender("male");
         setRegion("Northern");
         setOrigin("Rural");
@@ -285,7 +309,7 @@
         setEditingCaseId(caseData.id);
         setCaseType(caseData.type);
         setChildName(caseData.childName);
-        setChildAge(caseData.childAge.toString());
+        setChildDOB(caseData.childDOB || "");
         setChildGender(caseData.childGender);
         setRegion(caseData.region || "Northern");
         setOrigin(caseData.origin || "Rural");
@@ -344,7 +368,6 @@
         if (window.Chart) {
           const hasData = stats.total > 0;
 
-          // Gender Pie Chart
           if (genderChartRef.current) {
             genderChart = new window.Chart(genderChartRef.current, {
               type: "pie",
@@ -371,7 +394,6 @@
             });
           }
 
-          // Region Pie Chart
           if (regionChartRef.current) {
             regionChart = new window.Chart(regionChartRef.current, {
               type: "pie",
@@ -398,7 +420,6 @@
             });
           }
 
-          // Origin Pie Chart
           if (originChartRef.current) {
             originChart = new window.Chart(originChartRef.current, {
               type: "pie",
@@ -424,7 +445,6 @@
             });
           }
 
-          // Trend Line Chart
           if (trendChartRef.current) {
             const sortedDates = Object.keys(stats.dateCounts).sort();
             trendChart = new window.Chart(trendChartRef.current, {
@@ -526,15 +546,14 @@
                         className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                       />
 
-                      <label htmlFor="childAge" className="block text-sm font-medium text-gray-700 mb-2">
-                        Child Age:
+                      <label htmlFor="childDOB" className="block text-sm font-medium text-gray-700 mb-2">
+                        Day Of Birth:
                       </label>
                       <input
-                        id="childAge"
-                        type="number"
-                        value={childAge}
-                        onChange={(e) => setChildAge(e.target.value)}
-                        placeholder="Enter child age"
+                        id="childDOB"
+                        type="date"
+                        value={childDOB}
+                        onChange={(e) => setChildDOB(e.target.value)}
                         className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                       />
 
@@ -600,7 +619,7 @@
                         <button
                           onClick={() => {
                             setChildName("");
-                            setChildAge("");
+                            setChildDOB("");
                             setChildGender("male");
                             setRegion("Northern");
                             setOrigin("Rural");
@@ -617,7 +636,7 @@
 
                     {stats.hasSerious && (
                       <div className="mt-4 p-4 bg-red-50 border border-red-500 rounded-md text-red-600 font-semibold">
-                        ⚠️ Serious case detected! Alert sent to relevant organization.
+                        Warning: Serious case detected! Alert sent to relevant organization.
                       </div>
                     )}
                   </div>
@@ -671,6 +690,7 @@
                               <>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Type</th>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Child Name</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">DOB</th>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Age</th>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Gender</th>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Region</th>
@@ -685,6 +705,7 @@
                             ) : (
                               <>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Child Name</th>
+                                <th className="p-3 text-left text-sm font-semibold text-gray-700">DOB</th>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">AI Prediction</th>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Date</th>
                                 <th className="p-3 text-left text-sm font-semibold text-gray-700">Actions</th>
@@ -696,7 +717,7 @@
                           {displayedCases.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={user.role === "admin" || displayedCases.some(c => c.type === "school_report" && (c.createdBy === "user" || c.createdBy === "admin")) ? 12 : 4}
+                                colSpan={user.role === "admin" || displayedCases.some(c => c.type === "school_report" && (c.createdBy === "user" || c.createdBy === "admin")) ? 13 : 5}
                                 className="p-3 text-center text-gray-500"
                               >
                                 No data available
@@ -709,6 +730,7 @@
                                   <>
                                     <td className="p-3">{c.type}</td>
                                     <td className="p-3">{c.childName}</td>
+                                    <td className="p-3">{formatDateVN(c.childDOB)}</td>
                                     <td className="p-3">{c.childAge}</td>
                                     <td className="p-3">
                                       {c.childGender === "male" ? "Male" : c.childGender === "female" ? "Female" : "Other"}
@@ -754,6 +776,7 @@
                                 ) : (
                                   <>
                                     <td className="p-3">{c.childName}</td>
+                                    <td className="p-3">{formatDateVN(c.childDOB)}</td>
                                     <td
                                       className={`p-3 ${
                                         c.prediction === "serious"
